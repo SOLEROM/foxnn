@@ -1,5 +1,8 @@
 # RKNPU
 
+* support operators list: https://github.com/rockchip-linux/rknn-toolkit2/blob/master/doc/05_RKNN_Compiler_Support_Operator_List_v1.6.0.pdf
+
+
 * The NPU integrated into Rockchip processors is called RKNPU.
 * RV1103/RV1106 chips, which feature Rockchip's 4th generation self-developed NPU.
 * supports mixed quantization of int4, int8, and int16

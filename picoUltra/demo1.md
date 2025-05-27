@@ -4,7 +4,9 @@
 git clone https://github.com/airockchip/yolov5.git
 cd yolov5
 
-python3 -m venv venv
+<!-- python3 -m venv venv -->
+source venv/bin/activate
+
 
 pip install -r requirements.txt
 
