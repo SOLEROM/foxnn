@@ -7,12 +7,16 @@ STRIP   := $(CROSS_COMPILE)strip
 
 ## for ver1.6
 RKNN_SDK := /home/user/shared/rknn-toolkit2/rknpu2/runtime/Linux/librknn_api
+RKNN_INC := $(RKNN_SDK)/include
+RKNN_LIB := $(RKNN_SDK)/armhf-uclibc
+## for ver2.3
+# RKNN_SDK := /home/user/shared/rknn_model_zoo/install/rv1106_linux_armv7l/rknn_yolov5_demo/
+# RKNN_INC := /home/user/shared/rknn-toolkit2/rknpu2/runtime/Linux/librknn_api/include
+# RKNN_LIB := $(RKNN_SDK)/lib
 
 # ---------------------------------------------------------------------------
 #  RKNN runtime – for uClibc-based armhf
 # ---------------------------------------------------------------------------
-RKNN_INC := $(RKNN_SDK)/include
-RKNN_LIB := $(RKNN_SDK)/armhf-uclibc
 RKNN_SO  := $(RKNN_LIB)/librknnmrt.so
 
 LDFLAGS  := -L$(RKNN_LIB) -lrknnmrt -lpthread -lm -ldl -Wl,-rpath,'$$ORIGIN/lib'
