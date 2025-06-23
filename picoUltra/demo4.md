@@ -66,6 +66,5 @@ install/glibc/luckfox_pico_retinaface_facenet_demo/
 move to embedded side (chmod +x) and run
 
 ```
-./luckfox_pico_retinaface_facenet ./model/RetinaFace
-.rknn ./model/mobilefacenet.rknn ./model/test.jpg
+./luckfox_pico_retinaface_facenet ./model/RetinaFace.rknn ./model/mobilefacenet.rknn ./model/test.jpg
 ```

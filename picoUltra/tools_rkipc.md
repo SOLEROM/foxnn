@@ -15,3 +15,25 @@ Options:
 -h | --help        for help 
 
 ```
+
+
+## ??? more tools
+
+```
+[root@luckfox root]# rk_
+rk_adc_test           rk_led_test           rk_mpi_af_test        rk_mpi_ao_test        rk_mpi_dup_venc_test  rk_mpi_rgn_test       rk_mpi_venc_test      rk_mpi_vpss_test      rk_system_test
+rk_event_test         rk_mpi_adec_test      rk_mpi_ai_test        rk_mpi_avio_test      rk_mpi_mb_test        rk_mpi_sys_test       rk_mpi_vi_dup_test    rk_pwm_test           rk_time_test
+rk_gpio_test          rk_mpi_aenc_test      rk_mpi_amix_test      rk_mpi_avs_test       rk_mpi_mmz_test       rk_mpi_tde_test       rk_mpi_vi_test        rk_rve_sample_test    rk_watchdog_test
+
+```
+
+
+## process???
+
+```
+
+
+  461 root     rkipc -a /oem/usr/share/iqfiles
+  464 root     rkwifi_server start
+
+```
