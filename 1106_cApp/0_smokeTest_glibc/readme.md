@@ -1,4 +1,4 @@
-# probe
+# smoke test for glibc
 
 ## build
 
@@ -34,7 +34,7 @@ librknnmrt version: 1.6.0   // glibc
 
 ??? cant find ` 2.3` for glibc ???
 
-## test case
+## test run
 
 * build gcc with glibc
 * build rknn with 1.6
