@@ -1,5 +1,13 @@
 # rknn-toolkit2 miniconda
 
+* deps
+
+```
+sudo apt-get install python3 python3-dev python3-pip
+sudo apt-get install libxslt1-dev zlib1g zlib1g-dev libglib2.0-0 libsm6 libgl1-mesa-glx libprotobuf-dev gcc
+```
+
+
 ### install conda
 
 wget https://mirrors.tuna.tsinghua.edu.cn/anaconda/miniconda/Miniconda3-4.6.14-Linux-x86_64.sh
