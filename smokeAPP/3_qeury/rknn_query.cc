@@ -1,73 +1,132 @@
 #include <iostream>
 #include <rknn_api.h>
 #include <cstring>
+#include <cstdlib>
+
+const char* tensor_fmt(int fmt) {
+    switch (fmt) {
+        case RKNN_TENSOR_NCHW: return "NCHW";
+        case RKNN_TENSOR_NHWC: return "NHWC";
+        default: return "UNKNOWN_FMT";
+    }
+}
+
+const char* tensor_type(int type) {
+    switch (type) {
+        case RKNN_TENSOR_FLOAT32: return "float32";
+        case RKNN_TENSOR_INT8:    return "int8";
+        case RKNN_TENSOR_UINT8:   return "uint8";
+        default: return "UNKNOWN_TYPE";
+    }
+}
+
+const char* qnt_type_name(int q) {
+    switch (q) {
+        case RKNN_TENSOR_QNT_NONE:                return "NONE";
+        case RKNN_TENSOR_QNT_DFP:                 return "DFP";
+        case RKNN_TENSOR_QNT_AFFINE_ASYMMETRIC:   return "ASYM (u8/i8)";
+        default: return "UNKNOWN_OR_UNSUPPORTED_QNT_TYPE";
+    }
+}
 
 int main(int argc, char** argv) {
     if (argc != 2) {
-        std::cerr << "Usage: " << argv[0] << " model.rknn" << std::endl;
-        return -1;
+        std::cerr << "Usage: " << argv[0] << " model.rknn\n";
+        return 1;
     }
 
     const char* model_path = argv[1];
-
-    // Load RKNN model from file
     FILE* fp = fopen(model_path, "rb");
     if (!fp) {
-        std::cerr << "Failed to open " << model_path << std::endl;
-        return -1;
+        std::cerr << "Failed to open model: " << model_path << "\n";
+        return 1;
     }
+
     fseek(fp, 0, SEEK_END);
-    int model_size = ftell(fp);
+    int size = ftell(fp);
     rewind(fp);
-    void* model_data = malloc(model_size);
-    fread(model_data, 1, model_size, fp);
+    void* model_data = malloc(size);
+    fread(model_data, 1, size, fp);
     fclose(fp);
 
-    // Init RKNN
     rknn_context ctx;
-    int ret = rknn_init(&ctx, model_data, model_size, 0, nullptr);
-    if (ret < 0) {
-        std::cerr << "rknn_init failed: " << ret << std::endl;
-        return -1;
+    if (rknn_init(&ctx, model_data, size, 0, nullptr) != 0) {
+        std::cerr << "rknn_init failed\n";
+        return 1;
     }
 
-    // Query SDK and driver version
-    rknn_sdk_version version;
-    if (rknn_query(ctx, RKNN_QUERY_SDK_VERSION, &version, sizeof(version)) == 0) {
-        std::cout << "RKNN SDK version:   " << version.api_version << std::endl;
-        std::cout << "Driver version:     " << version.drv_version << std::endl;
+    // Version info
+    rknn_sdk_version ver;
+    if (rknn_query(ctx, RKNN_QUERY_SDK_VERSION, &ver, sizeof(ver)) == 0) {
+        std::cout << "RKNN SDK Version: " << ver.api_version
+                  << ", Driver Version: " << ver.drv_version << "\n";
     }
 
-    // Query input attributes
-    int n_inputs = 0, n_outputs = 0;
+    // Query IO count
     rknn_input_output_num io_num;
-    if (rknn_query(ctx, RKNN_QUERY_IN_OUT_NUM, &io_num, sizeof(io_num)) == 0) {
-        n_inputs = io_num.n_input;
-        n_outputs = io_num.n_output;
-        std::cout << "Num inputs:  " << n_inputs << "\n";
-        std::cout << "Num outputs: " << n_outputs << "\n";
-    }
+    rknn_query(ctx, RKNN_QUERY_IN_OUT_NUM, &io_num, sizeof(io_num));
+    std::cout << "\nModel I/O: " << io_num.n_input << " input(s), "
+              << io_num.n_output << " output(s)\n";
 
-    for (int i = 0; i < n_inputs; ++i) {
-        rknn_tensor_attr attr;
-        memset(&attr, 0, sizeof(attr));
+    // Input attributes
+    for (int i = 0; i < io_num.n_input; ++i) {
+        rknn_tensor_attr attr = {};
         attr.index = i;
         rknn_query(ctx, RKNN_QUERY_INPUT_ATTR, &attr, sizeof(attr));
-        std::cout << "\n[Input " << i << "] Name: " << attr.name
-                  << ", Dims: [" << attr.dims[0] << "," << attr.dims[1] << "," << attr.dims[2] << "," << attr.dims[3] << "]"
-                  << ", Type: " << attr.type << ", Qnt Type: " << attr.qnt_type
-                  << ", Fmt: " << attr.fmt << "\n";
+
+        std::cout << "\n[Input " << i << "]\n";
+        std::cout << "  Name       : " << attr.name << "\n";
+        std::cout << "  Dims       : [" << attr.dims[0] << ", "
+                                      << attr.dims[1] << ", "
+                                      << attr.dims[2] << ", "
+                                      << attr.dims[3] << "]\n";
+        std::cout << "  Type       : " << tensor_type(attr.type) << "\n";
+        std::cout << "  Qnt Type   : " << qnt_type_name(attr.qnt_type) << "\n";
+        std::cout << "  Format     : " << tensor_fmt(attr.fmt) << "\n";
+
+        int count = 1;
+        for (int j = 0; j < attr.n_dims; ++j)
+            count *= attr.dims[j];
+
+        int bytes_per_elem = (attr.type == RKNN_TENSOR_INT8 || attr.type == RKNN_TENSOR_UINT8) ? 1 : 4;
+
+        std::cout << "  Elements   : " << count << "\n";
+        std::cout << "  Buffer Size: " << count * bytes_per_elem << " bytes\n";
+
+        std::cout << "  📦 To fill input buffer:\n"
+                  << "    - Allocate array of " << count << " x "
+                  << tensor_type(attr.type) << "\n"
+                  << "    - Layout: " << tensor_fmt(attr.fmt)
+                  << " shape [" << attr.dims[0] << ", "
+                                << attr.dims[1] << ", "
+                                << attr.dims[2] << ", "
+                                << attr.dims[3] << "]\n";
     }
 
-    for (int i = 0; i < n_outputs; ++i) {
-        rknn_tensor_attr attr;
-        memset(&attr, 0, sizeof(attr));
+    // Output attributes
+    for (int i = 0; i < io_num.n_output; ++i) {
+        rknn_tensor_attr attr = {};
         attr.index = i;
         rknn_query(ctx, RKNN_QUERY_OUTPUT_ATTR, &attr, sizeof(attr));
-        std::cout << "\n[Output " << i << "] Name: " << attr.name
-                  << ", Dims: [" << attr.dims[0] << "," << attr.dims[1] << "," << attr.dims[2] << "," << attr.dims[3] << "]"
-                  << ", Type: " << attr.type << ", Qnt Type: " << attr.qnt_type
-                  << ", Fmt: " << attr.fmt << "\n";
+
+        std::cout << "\n[Output " << i << "]\n";
+        std::cout << "  Name       : " << attr.name << "\n";
+        std::cout << "  Dims       : [" << attr.dims[0] << ", "
+                                      << attr.dims[1] << ", "
+                                      << attr.dims[2] << ", "
+                                      << attr.dims[3] << "]\n";
+        std::cout << "  Type       : " << tensor_type(attr.type) << "\n";
+        std::cout << "  Qnt Type   : " << qnt_type_name(attr.qnt_type) << "\n";
+        std::cout << "  Format     : " << tensor_fmt(attr.fmt) << "\n";
+
+        int count = 1;
+        for (int j = 0; j < attr.n_dims; ++j)
+            count *= attr.dims[j];
+
+        int bytes_per_elem = (attr.type == RKNN_TENSOR_INT8 || attr.type == RKNN_TENSOR_UINT8) ? 1 : 4;
+
+        std::cout << "  Elements   : " << count << "\n";
+        std::cout << "  Output Size: " << count * bytes_per_elem << " bytes\n";
     }
 
     rknn_destroy(ctx);
