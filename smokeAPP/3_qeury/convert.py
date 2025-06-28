@@ -71,6 +71,8 @@ def main():
     num_channels = detect_input_channels(onnx_path)
     mean_values = [[0] * num_channels]
     std_values  = [[1] * num_channels]
+    
+    print(f"found num_channels to be {num_channels} ")
 
     rknn = RKNN(verbose=True)
 
