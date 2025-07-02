@@ -12,6 +12,7 @@
 #include <fstream>
 #include <cstring>
 #include <algorithm>
+#include <iomanip>     
 #include <numeric>
 #include <cstdint>
 #include <rknn_api.h>
@@ -55,6 +56,56 @@ void dump_attr(const rknn_tensor_attr& a) {
               << ", scale="     << a.scale
               << '\n';
 }
+
+
+/********************************************************************
+ * Dump a UINT8 / INT8 input tensor in either NHWC or NCHW layout.
+ * - attr must be the SAME rknn_tensor_attr you used for that tensor.
+ ********************************************************************/
+void print_input_tensor(const uint8_t* data, const rknn_tensor_attr& attr,
+                        int max_lines_per_ch = 8)
+{
+    const int batch = attr.dims[0];
+    if (batch != 1) {
+        std::cout << "(print_input_tensor) Only batch-1 is handled\n";
+        return;
+    }
+
+    int H, W, C;
+    bool nchw = (attr.fmt == RKNN_TENSOR_NCHW);
+    if (nchw) {            // NCHW
+        C = attr.dims[1];  H = attr.dims[2];  W = attr.dims[3];
+    } else {               // NHWC
+        H = attr.dims[1];  W = attr.dims[2];  C = attr.dims[3];
+    }
+
+    std::cout << "\n── Dump of input tensor (" << (nchw ? "NCHW" : "NHWC")
+              << ")  shape=[1," << H << ',' << W << ',' << C << "] ──\n";
+
+    for (int c = 0; c < C; ++c) {
+        std::cout << "[channel " << c << "]\n";
+        int lines = 0;
+        for (int y = 0; y < H; ++y) {
+            for (int x = 0; x < W; ++x) {
+                size_t idx;
+                if (nchw)
+                    idx = ((size_t)c * H + y) * W + x;          // N C H W → flat
+                else
+                    idx = ((size_t)y * W + x) * C + c;          // N H W C → flat
+
+                std::cout << std::setw(3) << int(data[idx]) << ' ';
+            }
+            std::cout << '\n';
+            if (++lines >= max_lines_per_ch && H > max_lines_per_ch) {
+                std::cout << "  … (" << (H - max_lines_per_ch)
+                          << " more rows)\n";
+                break;
+            }
+        }
+    }
+    std::cout << "──────────────────────────────────────────────\n";
+}
+
 
 /* ───────── main ───────── */
 int main(int argc, char** argv)
@@ -156,9 +207,18 @@ int main(int argc, char** argv)
     {
         std::cout << "\nRunning dummy inference …\n";
 
-        /* fill input[0] with mid-level 127 */
         auto* in_data = static_cast<uint8_t*>(in_mems[0]->virt_addr);
-        std::fill_n(in_data, in_attr[0].size_with_stride, 127);
+
+        // /* fill input[0] with const val  */
+        std::fill_n(in_data, in_attr[0].size_with_stride, 10);
+
+        // /* fill pattern [1 2 3 4] repeatedly */
+        // const uint8_t pattern[4] = {1,2,3,4};
+        // for (size_t off = 0; off < in_attr[0].n_elems; off += 4)
+        //     std::memcpy(in_data + off, pattern,
+        //                 std::min<size_t>(4, in_attr[0].n_elems - off));
+
+        print_input_tensor(in_data, in_attr[0]);
 
         /* run once */
         if (rknn_run(ctx, nullptr) != RKNN_SUCC) {
@@ -177,12 +237,6 @@ int main(int argc, char** argv)
                 std::cout << int(odata[j]) << ' ';
             std::cout << '\n';
 
-            /* basic stats */
-            auto [imin, imax] = std::minmax_element(odata, odata + nelems);
-            long long sum = std::accumulate(odata, odata + nelems, 0LL);
-            std::cout << "min=" << int(*imin)
-                      << "  max=" << int(*imax)
-                      << "  sum=" << sum << '\n';
         }
     }
 
