@@ -1,13 +1,19 @@
 /********************************************************************
- * yolov5_rknn_init.cpp  –  full introspection + zero-copy buffers
+ * yolov5_rknn_init.cpp  –  full introspection + dummy inference
  *
- * g++ -std=c++17 yolov5_rknn_init.cpp -lrknn_api -o yolov5_rknn_init
- * ./yolov5_rknn_init model.rknn
+ * Build:
+ *   g++ -std=c++17 yolov5_rknn_init.cpp -lrknn_api -o yolov5_rknn_init
+ *
+ * Run:
+ *   ./yolov5_rknn_init model.rknn
  ********************************************************************/
 #include <iostream>
 #include <vector>
 #include <fstream>
 #include <cstring>
+#include <algorithm>
+#include <numeric>
+#include <cstdint>
 #include <rknn_api.h>
 
 /* ───────── helpers ───────── */
@@ -85,7 +91,7 @@ int main(int argc, char** argv)
     std::cout << "\nI/O counts → inputs=" << io_num.n_input
               << "  outputs=" << io_num.n_output << '\n';
 
-    /* ── input attributes (native) ── */
+    /* ── input attributes ── */
     std::vector<rknn_tensor_attr> in_attr(io_num.n_input);
     std::cout << "\nInput tensors:\n";
     for (int i = 0; i < io_num.n_input; ++i) {
@@ -97,7 +103,7 @@ int main(int argc, char** argv)
         dump_attr(in_attr[i]);
     }
 
-    /* ── output attributes (native) ── */
+    /* ── output attributes ── */
     std::vector<rknn_tensor_attr> out_attr(io_num.n_output);
     std::cout << "\nOutput tensors:\n";
     for (int i = 0; i < io_num.n_output; ++i) {
@@ -109,8 +115,8 @@ int main(int argc, char** argv)
         dump_attr(out_attr[i]);
     }
 
-    /* ── zero-copy buffers (exactly like the C reference) ── */
-    // Force first input to UINT8 / NHWC so that quant-norm fusion happens in NPU
+    /* ── zero-copy buffers ── */
+    // Force first input to UINT8 / NHWC so that norm-quant fuse happens in NPU
     in_attr[0].type = RKNN_TENSOR_UINT8;
     in_attr[0].fmt  = RKNN_TENSOR_NHWC;
 
@@ -143,6 +149,44 @@ int main(int argc, char** argv)
     }
     std::cout << "Input shape: H=" << model_h << "  W=" << model_w << "  C=" << model_c << '\n';
 
+    /* ────────────────────────────────────
+     *  DUMMY RUN – feed constant data and
+     *  print raw outputs (int8 / uint8)
+     * ────────────────────────────────── */
+    {
+        std::cout << "\nRunning dummy inference …\n";
+
+        /* fill input[0] with mid-level 127 */
+        auto* in_data = static_cast<uint8_t*>(in_mems[0]->virt_addr);
+        std::fill_n(in_data, in_attr[0].size_with_stride, 127);
+
+        /* run once */
+        if (rknn_run(ctx, nullptr) != RKNN_SUCC) {
+            std::cerr << "rknn_run failed\n"; goto CLEANUP;
+        }
+
+        /* dump each output */
+        for (uint32_t i = 0; i < io_num.n_output; ++i) {
+            std::cout << "\n── Output #" << i << " ──\n";
+            const int8_t* odata = static_cast<const int8_t*>(out_mems[i]->virt_addr);
+            size_t nelems       = out_attr[i].n_elems;
+
+            /* print first 8 elements */
+            std::cout << "first 8 values : ";
+            for (size_t j = 0; j < std::min<size_t>(8, nelems); ++j)
+                std::cout << int(odata[j]) << ' ';
+            std::cout << '\n';
+
+            /* basic stats */
+            auto [imin, imax] = std::minmax_element(odata, odata + nelems);
+            long long sum = std::accumulate(odata, odata + nelems, 0LL);
+            std::cout << "min=" << int(*imin)
+                      << "  max=" << int(*imax)
+                      << "  sum=" << sum << '\n';
+        }
+    }
+
+CLEANUP:
     /* clean-up */
     for (auto* m : in_mems)  if (m) rknn_destroy_mem(ctx, m);
     for (auto* m : out_mems) if (m) rknn_destroy_mem(ctx, m);
