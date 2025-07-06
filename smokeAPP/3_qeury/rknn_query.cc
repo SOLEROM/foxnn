@@ -107,6 +107,53 @@ void print_input_tensor(const uint8_t* data, const rknn_tensor_attr& attr,
 }
 
 
+/********************************************************************
+ * print_tensor_raw ― dump every element of an RKNN tensor
+ *   • Handles UINT8, INT8, and FLOAT32
+ *   • Prints values in flat (row-major) order, one line 16 elements wide
+ ********************************************************************/
+void print_tensor_raw(const rknn_tensor_mem* mem,
+                      const rknn_tensor_attr& attr)
+{
+    const size_t n = attr.n_elems;               // total elements
+
+    auto newline_every = [](size_t i) { return (i & 15) == 15; };
+
+    switch (attr.type)
+    {
+    case RKNN_TENSOR_UINT8:
+    {
+        const uint8_t* d = static_cast<const uint8_t*>(mem->virt_addr);
+        for (size_t i = 0; i < n; ++i) {
+            std::cout << std::setw(4) << int(d[i]);
+            if (newline_every(i) || i + 1 == n) std::cout << '\n';
+        }
+        break;
+    }
+    case RKNN_TENSOR_INT8:
+    {
+        const int8_t* d = static_cast<const int8_t*>(mem->virt_addr);
+        for (size_t i = 0; i < n; ++i) {
+            std::cout << std::setw(4) << int(d[i]);
+            if (newline_every(i) || i + 1 == n) std::cout << '\n';
+        }
+        break;
+    }
+    case RKNN_TENSOR_FLOAT32:
+    {
+        const float* d = static_cast<const float*>(mem->virt_addr);
+        for (size_t i = 0; i < n; ++i) {
+            std::cout << std::setw(10) << d[i];
+            if (newline_every(i) || i + 1 == n) std::cout << '\n';
+        }
+        break;
+    }
+    default:
+        std::cout << "(print_tensor_raw) unsupported type\n";
+    }
+}
+
+
 /* ───────── main ───────── */
 int main(int argc, char** argv)
 {
@@ -225,18 +272,13 @@ int main(int argc, char** argv)
             std::cerr << "rknn_run failed\n"; goto CLEANUP;
         }
 
-        /* dump each output */
+        /* dump each output ― ALL VALUES */
         for (uint32_t i = 0; i < io_num.n_output; ++i) {
-            std::cout << "\n── Output #" << i << " ──\n";
-            const int8_t* odata = static_cast<const int8_t*>(out_mems[i]->virt_addr);
-            size_t nelems       = out_attr[i].n_elems;
+            std::cout << "\n── Output #" << i
+                    << "  (type=" << type_str(out_attr[i].type)
+                    << "  elems=" << out_attr[i].n_elems << ") ──\n";
 
-            /* print first 8 elements */
-            std::cout << "first 8 values : ";
-            for (size_t j = 0; j < std::min<size_t>(8, nelems); ++j)
-                std::cout << int(odata[j]) << ' ';
-            std::cout << '\n';
-
+            print_tensor_raw(out_mems[i], out_attr[i]);
         }
     }
 
